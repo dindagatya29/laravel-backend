@@ -27,6 +27,18 @@ class PermissionSeeder extends Seeder
             ['name' => 'upload_files', 'description' => 'Upload files to projects'],
             ['name' => 'view_own_reports', 'description' => 'View own task reports'],
             ['name' => 'view_time_tracking', 'description' => 'View time tracking data'],
+
+            // // ✅ Tambahan khusus document/file access/folder
+            // ['name' => 'upload_documents', 'description' => 'Upload document files'],
+            // ['name' => 'view_documents', 'description' => 'View list of documents'],
+            // ['name' => 'delete_documents', 'description' => 'Delete documents'],
+            // ['name' => 'edit_documents', 'description' => 'Edit document details'],
+            // ['name' => 'preview_documents', 'description' => 'Preview document files'],
+            // ['name' => 'download_documents', 'description' => 'Download documents'],
+            // ['name' => 'create_folders', 'description' => 'Create new folders for organizing documents'],
+            // ['name' => 'rename_folders', 'description' => 'Rename existing folders'],
+            // ['name' => 'delete_folders', 'description' => 'Delete folders and their contents'],
+            // ['name' => 'view_folders', 'description' => 'View list of folders'],
         ];
 
         foreach ($permissions as $permission) {
@@ -38,4 +50,4 @@ class PermissionSeeder extends Seeder
             ]);
         }
     }
-} 
+}

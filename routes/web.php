@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
 
 Route::get('/', function () {
     return response()->json([
@@ -29,4 +31,14 @@ Route::get('/test-db', function () {
             'error' => $e->getMessage()
         ], 500);
     }
+});
+
+Route::get('/download/{filename}', function ($filename) {
+    $path = storage_path('app/public/documents/' . $filename);
+
+    if (!File::exists($path)) {
+        abort(404);
+    }
+
+    return response()->file($path);
 });

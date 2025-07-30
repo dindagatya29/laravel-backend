@@ -17,4 +17,12 @@ class Authenticate extends Middleware
         }
         parent::unauthenticated($request, $guards);
     }
+    protected function redirectTo($request)
+{
+    if (! $request->expectsJson()) {
+        // return route('login'); ❌ hapus ini
+        return null; // ✅ tambahkan ini
+    }
+}
+
 }

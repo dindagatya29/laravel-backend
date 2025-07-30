@@ -11,13 +11,13 @@ use App\Http\Controllers\Api\KpiController;
 use App\Http\Controllers\Api\OkrController;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Api\AuthController;
-use Illuminate\Support\Facades\Cookie;
 use App\Http\Controllers\Api\CustomEventController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\TimeEntryController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\FolderController;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,34 +51,66 @@ Route::get('/test-db', function () {
     }
 });
 
-// User routes
+// ✅ PERBAIKAN: Auth routes (tanpa middleware untuk login/register)
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']);
+
+// ✅ PERBAIKAN: Files & Folders routes TANPA AUTH (untuk testing)
+// HAPUS prefix 'api' karena sudah otomatis ada di routes/api.php
+Route::get('/files', [FileController::class, 'index']);
+
+
+Route::post('/files', [FileController::class, 'store']); // ✅ Upload dokumen
+
+Route::get('/files/{id}', [FileController::class, 'show']);
+Route::put('/files/{id}', [FileController::class, 'update']);
+Route::delete('/files/{id}', [FileController::class, 'destroy']);
+Route::get('/files/{id}/download', [FileController::class, 'download']);
+Route::get('/files/{id}/preview', [FileController::class, 'preview']);
+
+// Route::middleware('auth:sanctum')->get('/me/permissions', function (Request $request) {
+//     return response()->json([
+//         'permissions' => $request->user()?->getAllPermissions()
+//     ]);
+// });
+
+// Folders routes
+
+Route::get('/folders', [FolderController::class, 'index']);
+
+Route::post('/folders', [FolderController::class, 'store']);
+Route::get('/folders/{id}', [FolderController::class, 'show']);
+Route::put('/folders/{id}', [FolderController::class, 'update']);
+Route::delete('/folders/{id}', [FolderController::class, 'destroy']);
+Route::delete('/folders/{folderId}/files/clear', [FileController::class, 'clearAllInFolder']);
+ 
+
+// ✅ User routes
 Route::apiResource('users', UserController::class);
 
-// Project routes
+// ✅ Project routes
 Route::apiResource('projects', ProjectController::class);
 Route::get('projects/stats', [ProjectController::class, 'stats']);
 Route::get('projects/{id}/stats', [ProjectController::class, 'stats']);
 
-// Task routes
+// ✅ Task routes
 Route::apiResource('tasks', TaskController::class);
 Route::patch('tasks/{id}/status', [TaskController::class, 'updateStatus']);
 
-// Team routes
+// ✅ Team routes
 Route::prefix('team')->group(function () {
     Route::get('/', [TeamController::class, 'index']);
     Route::post('/', [TeamController::class, 'store']);
     Route::get('/stats', [TeamController::class, 'stats']);
-    Route::get('/departments', [TeamController::class, 'departments']); // ✅ Fix di sini
-    Route::post('/departments', [TeamController::class, 'createDepartment']); // ✅
+    Route::get('/departments', [TeamController::class, 'departments']);
+    Route::post('/departments', [TeamController::class, 'createDepartment']);
     Route::get('/activity', [TeamController::class, 'activity']);
     Route::get('/{id}', [TeamController::class, 'show']);
     Route::put('/{id}', [TeamController::class, 'update']);
     Route::delete('/{id}', [TeamController::class, 'destroy']);
 });
 
-
-
-// Activity Logs
+// ✅ Activity Logs
 Route::get('/activity-logs', [ActivityLogController::class, 'index']);
 Route::post('/activity-logs', [ActivityLogController::class, 'store']);
 Route::get('/activity-logs/stats', [ActivityLogController::class, 'stats']);
@@ -86,11 +118,11 @@ Route::get('/activity-logs/recent', [ActivityLogController::class, 'recent']);
 Route::delete('/activity-logs/clear', [ActivityLogController::class, 'clear']);
 Route::delete('/activity-logs/clear-all', [ActivityLogController::class, 'clearAll']);
 
-// Custom Events
+// ✅ Custom Events
 Route::get('custom-events', [CustomEventController::class, 'index']);
 Route::post('custom-events', [CustomEventController::class, 'store']);
 
-// KPI routes
+// ✅ KPI routes
 Route::prefix('kpis')->group(function () {
     Route::get('/', [KpiController::class, 'index']);
     Route::post('/', [KpiController::class, 'store']);
@@ -102,7 +134,7 @@ Route::prefix('kpis')->group(function () {
     Route::patch('/{id}/value', [KpiController::class, 'updateValue']);
 });
 
-// OKR routes
+// ✅ OKR routes
 Route::prefix('okrs')->group(function () {
     Route::get('/', [OkrController::class, 'index']);
     Route::post('/', [OkrController::class, 'store']);
@@ -114,60 +146,10 @@ Route::prefix('okrs')->group(function () {
     Route::patch('/{okrId}/key-results/{keyResultId}/value', [OkrController::class, 'updateKeyResultValue']);
 });
 
-// Tambahkan group middleware web untuk login dan register
-// Route::middleware('web')->group(function () {
-//     Route::post('login', [AuthController::class, 'login']);
-//     Route::post('register', [AuthController::class, 'register']);
-// });
-
-// Tambahkan route untuk mengambil user yang sedang login
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
-
-Route::middleware('auth:sanctum')->post('/profile', [ProfileController::class, 'update']);
-
-// Route login baru (token-based, tanpa session)
-Route::post('login', [AuthController::class, 'login']);
-Route::post('register', [AuthController::class, 'register']);
-
-// Role & Permission Management
-Route::prefix('admin')->group(function () {
-    Route::get('users/with-role', [UserController::class, 'usersWithRole']);
-    Route::patch('users/{id}/role', [UserController::class, 'updateRole']);
-    Route::get('roles', [UserController::class, 'roles']);
-    Route::get('permissions', [UserController::class, 'permissions']);
-    Route::get('role-permissions/{role}', [UserController::class, 'getRolePermissions']);
-    Route::post('role-permissions/{role}', [UserController::class, 'setRolePermissions']);
-    Route::get('user-permissions/{userId}', [UserController::class, 'getUserPermissions']);
-    
-    // Settings routes
-    Route::get('settings', [SettingsController::class, 'index']);
-    Route::post('settings', [SettingsController::class, 'store']);
-    Route::post('settings/export', [SettingsController::class, 'export']);
-    Route::get('settings/download/{filename}', [SettingsController::class, 'download']);
-    Route::post('settings/backup', [SettingsController::class, 'backup']);
-    Route::get('settings/statistics', [SettingsController::class, 'statistics']);
-});
-
-// Fallback route
-Route::fallback(function () {
-    return response()->json([
-        'message' => 'API endpoint not found'
-    ], 404);
-});
-
-// Tambahkan route group:
+// ✅ Time Entries
 Route::apiResource('time-entries', TimeEntryController::class);
-// Pastikan endpoint dokumen sudah ada: upload, hapus, download, preview.
 
-// Kembalikan route files dengan middleware auth:sanctum
-Route::middleware('auth:sanctum')->group(function () {
-    Route::apiResource('files', FileController::class);
-    Route::get('files/{id}/download', [FileController::class, 'download']);
-    Route::get('files/{id}/preview', [FileController::class, 'preview']);
-});
-
+// ✅ Notifications
 Route::prefix('notifications')->group(function () {
     Route::get('/', [NotificationController::class, 'index']);
     Route::post('/', [NotificationController::class, 'create']);
@@ -179,3 +161,50 @@ Route::prefix('notifications')->group(function () {
     Route::put('/settings', [NotificationController::class, 'updateSettings']);
 });
 
+// ✅ AUTHENTICATED ROUTES (dengan middleware auth:sanctum)
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
+// User profile
+Route::get('/user', function (Request $request) {
+    return $request->user();
+});
+Route::apiResource('users', UserController::class);
+
+Route::post('/profile', [ProfileController::class, 'update']);
+
+// Admin routes
+Route::prefix('admin')->group(function () {
+    Route::get('users/with-role', [UserController::class, 'usersWithRole']);
+    Route::patch('users/{id}/role', [UserController::class, 'updateRole']);
+    Route::get('roles', [UserController::class, 'roles']);
+    Route::get('permissions', [UserController::class, 'permissions']);
+    Route::get('role-permissions/{role}', [UserController::class, 'getRolePermissions']);
+    Route::post('role-permissions/{role}', [UserController::class, 'setRolePermissions']);
+    Route::get('user-permissions/{userId}', [UserController::class, 'getUserPermissions']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::prefix('admin')->group(function () {
+            Route::get('users/with-role', [UserController::class, 'usersWithRole']);
+            Route::get('permissions', [UserController::class, 'permissions']);
+            Route::get('role-permissions/{role}', [UserController::class, 'getRolePermissions']);
+            Route::get('user-permissions/{userId}', [UserController::class, 'getUserPermissions']);
+        });
+    });
+
+    // Settings routes
+    Route::get('settings', [SettingsController::class, 'index']);
+    Route::post('settings', [SettingsController::class, 'store']);
+    Route::post('settings/export', [SettingsController::class, 'export']);
+    Route::get('settings/download/{filename}', [SettingsController::class, 'download']);
+    Route::post('settings/backup', [SettingsController::class, 'backup']);
+    Route::get('settings/statistics', [SettingsController::class, 'statistics']);
+});
+
+
+// ✅ Fallback route
+Route::fallback(function () {
+    return response()->json([
+        'message' => 'API endpoint not found'
+    ], 404);
+});
