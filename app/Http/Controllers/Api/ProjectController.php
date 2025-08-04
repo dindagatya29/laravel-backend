@@ -22,7 +22,7 @@ class ProjectController extends Controller
                 'filters' => $request->all(),
                 'ip' => $request->ip()
             ]);
-            
+
             $query = Project::query();
 
             // Apply filters
@@ -37,11 +37,13 @@ class ProjectController extends Controller
             if ($request->filled('search')) {
                 $query->where(function ($q) use ($request) {
                     $q->where('name', 'like', '%' . $request->search . '%')
-                      ->orWhere('description', 'like', '%' . $request->search . '%');
+                        ->orWhere('description', 'like', '%' . $request->search . '%');
                 });
             }
 
-            $projects = $query->orderBy('created_at', 'desc')->get();
+            $projects = $query->with('team')->orderBy('created_at', 'desc')->get();
+
+
 
             $formattedProjects = $projects->map(function ($project) {
                 // Get real-time task statistics
@@ -67,7 +69,14 @@ class ProjectController extends Controller
                     'created_at' => $project->created_at->toISOString(),
                     'updated_at' => $project->updated_at->toISOString(),
                     'is_overdue' => $project->due_date && $project->due_date->isPast() && $project->status !== 'Completed',
-                    'team' => [], // Dummy data untuk frontend compatibility
+                    'team' => $project->team->map(function ($user) {
+                        return [
+                            'id' => $user->id,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $user->pivot->role ?? 'Member',
+                        ];
+                    })->values(), // 👈 tambahkan ini
                     'tasks' => [
                         'total' => $totalTasks,
                         'completed' => $completedTasks,
@@ -90,14 +99,13 @@ class ProjectController extends Controller
                     'filters_applied' => $request->only(['status', 'priority', 'search'])
                 ]
             ]);
-
         } catch (\Exception $e) {
             Log::error('API Error: Failed to fetch projects', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'request' => $request->all()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch projects',
@@ -110,124 +118,115 @@ class ProjectController extends Controller
      * Create a new project
      */
     public function store(Request $request): JsonResponse
-    {
-        try {
-            Log::info('API Request: Create Project', [
-                'data' => $request->all(),
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent()
-            ]);
+{
+    try {
+        Log::info('API Request: Create Project', [
+            'data' => $request->all(),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent()
+        ]);
 
-            // Enhanced validation
-            $validator = Validator::make($request->all(), [
-                'name' => 'required|string|max:255|min:1',
-                'description' => 'nullable|string|max:1000',
-                'status' => 'nullable|in:Planning,In Progress,Completed,On Hold',
-                'priority' => 'nullable|in:Low,Medium,High',
-                'due_date' => 'nullable|date|after_or_equal:today',
-                'progress' => 'nullable|integer|min:0|max:100',
-            ]);
+        // Validasi input
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255|min:1',
+            'description' => 'nullable|string|max:1000',
+            'status' => 'nullable|in:Planning,In Progress,Completed,On Hold',
+            'priority' => 'nullable|in:Low,Medium,High',
+            'due_date' => 'nullable|date|after_or_equal:today',
+            'progress' => 'nullable|integer|min:0|max:100',
+            'team' => 'array', // ✅ Validasi tim sebagai array
+            'team.*.id' => 'required|exists:users,id', // ✅ Validasi setiap anggota tim
+            'team.*.role' => 'nullable|string'
+        ]);
 
-            if ($validator->fails()) {
-                Log::warning('API Validation Failed: Create Project', [
-                    'errors' => $validator->errors(),
-                    'data' => $request->all()
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            // Prepare data with defaults
-            $projectData = [
-                'name' => trim($request->name),
-                'description' => $request->description ?? '',
-                'status' => $request->status ?? 'Planning',
-                'priority' => $request->priority ?? 'Medium',
-                'progress' => $request->progress ?? 0,
-                'due_date' => $request->due_date ?? null,
-            ];
-
-            Log::info('Creating project with data:', $projectData);
-
-            // Use database transaction
-            DB::beginTransaction();
-
-            try {
-                $project = Project::create($projectData);
-                
-                Log::info('Project created in database', [
-                    'project_id' => $project->id,
-                    'project_data' => $project->toArray()
-                ]);
-
-                DB::commit();
-
-                // Get real-time task statistics (should be 0 for new project)
-                $totalTasks = $project->tasks()->count();
-                $completedTasks = $project->tasks()->where('status', 'Completed')->count();
-                $inProgressTasks = $project->tasks()->where('status', 'In Progress')->count();
-                $todoTasks = $project->tasks()->where('status', 'Todo')->count();
-
-                // 🔄 Calculate progress based on tasks
-                $calculatedProgress = 0;
-                if ($totalTasks > 0) {
-                    $calculatedProgress = round(($completedTasks / $totalTasks) * 100);
-                }
-
-                // Format response
-                $responseData = [
-                    'id' => $project->id,
-                    'name' => $project->name,
-                    'description' => $project->description,
-                    'status' => $project->status,
-                    'progress' => $calculatedProgress, // Use calculated progress
-                    'due_date' => $project->due_date ? $project->due_date->format('Y-m-d') : null,
-                    'priority' => $project->priority,
-                    'created_at' => $project->created_at->toISOString(),
-                    'updated_at' => $project->updated_at->toISOString(),
-                    'team' => [],
-                    'tasks' => [
-                        'total' => $totalTasks,
-                        'completed' => $completedTasks,
-                        'in_progress' => $inProgressTasks,
-                        'todo' => $todoTasks,
-                    ],
-                ];
-
-                Log::info('API Response: Project created successfully', [
-                    'project_id' => $project->id,
-                    'response_data' => $responseData
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Project created successfully',
-                    'data' => $responseData,
-                ], 201);
-
-            } catch (\Exception $e) {
-                DB::rollback();
-                throw $e;
-            }
-
-        } catch (\Exception $e) {
-            Log::error('API Error: Failed to create project', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_data' => $request->all()
-            ]);
-            
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create project',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
         }
+
+        $projectData = [
+            'name' => trim($request->name),
+            'description' => $request->description ?? '',
+            'status' => $request->status ?? 'Planning',
+            'priority' => $request->priority ?? 'Medium',
+            'progress' => $request->progress ?? 0,
+            'due_date' => $request->due_date ?? null,
+        ];
+
+        DB::beginTransaction();
+
+        $project = Project::create($projectData);
+
+        // // ✅ Simpan anggota tim (attach ke pivot table)
+        // if ($request->has('team')) {
+        //     $teamData = collect($request->team)->mapWithKeys(function ($member) {
+        //         return [$member['id'] => ['role' => $member['role'] ?? 'Member']];
+        //     })->toArray();
+
+        //     $project->team()->sync($teamData);
+        // }
+
+        if ($request->has('team')) {
+    $teamMembers = collect($request->team)->mapWithKeys(function ($user) {
+        return [$user['id'] => ['role' => $user['role'] ?? 'Member']];
+    });
+    $project->team()->sync($teamMembers);
+}
+
+if ($request->has('team_ids')) {
+    $teamMembers = collect($request->team_ids)->mapWithKeys(fn($id) => [$id => ['role' => 'Member']]);
+    $project->team()->sync($teamMembers);
+}
+
+        DB::commit();
+
+        // Ambil ulang data lengkap
+        $project->load('team');
+
+        $taskStats = $project->getTaskStats();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Project created successfully',
+            'data' => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'description' => $project->description,
+                'status' => $project->status,
+                'progress' => $project->progress,
+                'due_date' => optional($project->due_date)->format('Y-m-d'),
+                'priority' => $project->priority,
+                'created_at' => $project->created_at->toISOString(),
+                'updated_at' => $project->updated_at->toISOString(),
+                'team' => $project->team->map(function ($user) {
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $user->pivot->role ?? 'Member',
+                    ];
+                })->values(), // ✅ Pastikan hasilnya array
+                'tasks' => $taskStats,
+            ]
+        ], 201);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Failed to create project', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to create project',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
     }
+}
+
 
     /**
      * Get project statistics
@@ -252,13 +251,12 @@ class ProjectController extends Controller
                 'success' => true,
                 'data' => $stats,
             ]);
-
         } catch (\Exception $e) {
             Log::error('API Error: Failed to fetch stats', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch statistics',
@@ -306,7 +304,14 @@ class ProjectController extends Controller
                     'priority' => $project->priority,
                     'created_at' => $project->created_at->toISOString(),
                     'updated_at' => $project->updated_at->toISOString(),
-                    'team' => [],
+                    'team' => $project->team->map(function ($user) {
+                        return [
+                            'id' => $user->id,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $user->pivot->role ?? 'Member',
+                        ];
+                    })->values(), // 👈 tambahkan ini
                     'tasks' => [
                         'total' => $totalTasks,
                         'completed' => $completedTasks,
@@ -315,10 +320,9 @@ class ProjectController extends Controller
                     ],
                 ],
             ]);
-
         } catch (\Exception $e) {
             Log::error('API Error: Failed to fetch project', ['error' => $e->getMessage(), 'id' => $id]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch project',
@@ -397,7 +401,14 @@ class ProjectController extends Controller
                     'priority' => $project->priority,
                     'created_at' => $project->created_at->toISOString(),
                     'updated_at' => $project->updated_at->toISOString(),
-                    'team' => [],
+                    'team' => $project->team->map(function ($user) {
+                        return [
+                            'id' => $user->id,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $user->pivot->role ?? 'Member',
+                        ];
+                    })->values(), // 👈 tambahkan ini
                     'tasks' => [
                         'total' => $totalTasks,
                         'completed' => $completedTasks,
@@ -406,14 +417,13 @@ class ProjectController extends Controller
                     ],
                 ],
             ]);
-
         } catch (\Exception $e) {
             Log::error('API Error: Failed to update project', [
                 'error' => $e->getMessage(),
                 'id' => $id,
                 'request_data' => $request->all()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update project',
@@ -446,10 +456,9 @@ class ProjectController extends Controller
                 'success' => true,
                 'message' => 'Project deleted successfully',
             ]);
-
         } catch (\Exception $e) {
             Log::error('API Error: Failed to delete project', ['error' => $e->getMessage(), 'id' => $id]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete project',

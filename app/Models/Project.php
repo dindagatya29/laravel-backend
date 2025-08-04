@@ -57,4 +57,12 @@ class Project extends Model
 
         $this->update(['progress' => $newProgress]);
     }
+
+    public function team()
+{
+    return $this->belongsToMany(User::class, 'project_members', 'project_id', 'user_id')
+                ->withPivot('role')
+                ->withTimestamps();
+}
+
 }

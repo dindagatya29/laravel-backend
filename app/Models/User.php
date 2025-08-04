@@ -54,9 +54,11 @@ class User extends Authenticatable
     }
 
     public function projects()
-    {
-        return $this->belongsToMany(Project::class, 'project_members', 'user_id', 'project_id');
-    }
+{
+    return $this->belongsToMany(Project::class, 'project_members', 'user_id', 'project_id')
+                ->withPivot('role')
+                ->withTimestamps();
+}
 
     // Helper methods
     public function getTaskStats()
@@ -95,6 +97,8 @@ class User extends Authenticatable
 
         return array_unique(array_merge($createdProjects, $memberProjects));
     }
+
+    
 
 
 // public function hasPermission(string $permissionName): bool

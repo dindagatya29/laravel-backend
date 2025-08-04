@@ -19,12 +19,14 @@ class Task extends Model
         'due_date',
         'progress',
         'tags',
+        'todo_list', // Added todo_list field
     ];
 
     protected $casts = [
         'due_date' => 'date',
         'progress' => 'integer',
         'tags' => 'array', // Cast JSON to array
+        'todo_list' => 'array', // Cast todo_list to array
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
