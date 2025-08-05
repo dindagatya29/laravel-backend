@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log; // ✅ Tambahkan ini untuk logging
 
 class ActivityLogController extends Controller
 {
@@ -17,42 +18,35 @@ class ActivityLogController extends Controller
     {
         try {
             $query = ActivityLog::with('user')->orderBy('created_at', 'desc');
-
             // Filter by type
             if ($request->has('type') && $request->type !== 'all') {
                 $query->ofType($request->type);
             }
-
             // Filter by user
             if ($request->has('user_id')) {
                 $query->byUser($request->user_id);
             }
-
             // Filter by date range
             if ($request->has('start_date')) {
                 $query->where('created_at', '>=', $request->start_date);
             }
-
             if ($request->has('end_date')) {
                 $query->where('created_at', '<=', $request->end_date);
             }
-
             // Search
             if ($request->has('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('user_name', 'like', "%{$search}%")
-                      ->orWhere('action', 'like', "%{$search}%")
-                      ->orWhere('target', 'like', "%{$search}%")
-                      ->orWhere('project', 'like', "%{$search}%")
-                      ->orWhere('details', 'like', "%{$search}%");
+                        ->orWhere('action', 'like', "%{$search}%")
+                        ->orWhere('target', 'like', "%{$search}%")
+                        ->orWhere('project', 'like', "%{$search}%")
+                        ->orWhere('details', 'like', "%{$search}%");
                 });
             }
-
             // Pagination
             $perPage = $request->get('per_page', 20);
             $activities = $query->paginate($perPage);
-
             // Transform data for frontend
             $transformedActivities = $activities->getCollection()->map(function ($activity) {
                 return [
@@ -70,7 +64,6 @@ class ActivityLogController extends Controller
                     'metadata' => $activity->metadata
                 ];
             });
-
             return response()->json([
                 'success' => true,
                 'message' => 'Activity logs retrieved successfully',
@@ -82,8 +75,8 @@ class ActivityLogController extends Controller
                     'total' => $activities->total()
                 ]
             ]);
-
         } catch (\Exception $e) {
+            Log::error('Error retrieving activity logs: ' . $e->getMessage()); // ✅ Tambahkan logging
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve activity logs',
@@ -116,14 +109,13 @@ class ActivityLogController extends Controller
                     ->limit(5)
                     ->get()
             ];
-
             return response()->json([
                 'success' => true,
                 'message' => 'Activity statistics retrieved successfully',
                 'data' => $stats
             ]);
-
         } catch (\Exception $e) {
+            Log::error('Error retrieving activity statistics: ' . $e->getMessage()); // ✅ Tambahkan logging
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve activity statistics',
@@ -138,6 +130,9 @@ class ActivityLogController extends Controller
     public function store(Request $request)
     {
         try {
+            // Log the incoming request data for debugging
+            Log::info('ActivityLog store request received:', $request->all());
+
             $validated = $request->validate([
                 'action' => 'required|string|max:255',
                 'target' => 'required|string|max:255',
@@ -148,7 +143,7 @@ class ActivityLogController extends Controller
             ]);
 
             $user = Auth::user();
-            
+
             $activity = ActivityLog::create([
                 'user_id' => $user?->id,
                 'user_name' => $user?->name ?: 'System',
@@ -156,21 +151,25 @@ class ActivityLogController extends Controller
                 'user_color' => $user?->color,
                 'action' => $validated['action'],
                 'target' => $validated['target'],
-                'project' => $validated['project'],
+                // ✅ PERBAIKAN: Gunakan $request->input() untuk mengakses 'project' dengan aman
+                'project' => $request->input('project'),
                 'type' => $validated['type'],
-                'details' => $validated['details'],
-                'metadata' => $validated['metadata'],
+                'details' => $request->input('details'), // ✅ Lebih aman juga untuk details
+                'metadata' => $request->input('metadata', []), // ✅ Lebih aman juga untuk metadata, dengan default array kosong
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent()
             ]);
+
+            Log::info('Activity log created successfully:', $activity->toArray()); // ✅ Tambahkan logging
 
             return response()->json([
                 'success' => true,
                 'message' => 'Activity log created successfully',
                 'data' => $activity
             ], 201);
-
         } catch (\Exception $e) {
+            Log::error('Error creating activity log: ' . $e->getMessage()); // ✅ Tambahkan logging
+            Log::error('Stack trace: ' . $e->getTraceAsString()); // ✅ Tambahkan stack trace
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create activity log',
@@ -205,14 +204,13 @@ class ActivityLogController extends Controller
                         'details' => $activity->details
                     ];
                 });
-
             return response()->json([
                 'success' => true,
                 'message' => 'Recent activities retrieved successfully',
                 'data' => $recentActivities
             ]);
-
         } catch (\Exception $e) {
+            Log::error('Error retrieving recent activities: ' . $e->getMessage()); // ✅ Tambahkan logging
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve recent activities',
@@ -228,14 +226,14 @@ class ActivityLogController extends Controller
     {
         try {
             $deleted = ActivityLog::truncate();
-
+            Log::info('All activity logs cleared.'); // ✅ Tambahkan logging
             return response()->json([
                 'success' => true,
                 'message' => "Cleared all activity logs",
                 'deleted_count' => $deleted
             ]);
-
         } catch (\Exception $e) {
+            Log::error('Error clearing all activity logs: ' . $e->getMessage()); // ✅ Tambahkan logging
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to clear all activity logs',
@@ -252,14 +250,14 @@ class ActivityLogController extends Controller
         try {
             $days = $request->get('days', 30);
             $deleted = ActivityLog::where('created_at', '<', now()->subDays($days))->delete();
-
+            Log::info("Cleared {$deleted} old activity logs older than {$days} days."); // ✅ Tambahkan logging
             return response()->json([
                 'success' => true,
                 'message' => "Cleared {$deleted} old activity logs",
                 'deleted_count' => $deleted
             ]);
-
         } catch (\Exception $e) {
+            Log::error('Error clearing old activity logs: ' . $e->getMessage()); // ✅ Tambahkan logging
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to clear activity logs',
