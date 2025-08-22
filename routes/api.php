@@ -183,14 +183,14 @@ Route::prefix('admin')->group(function () {
     Route::post('role-permissions/{role}', [UserController::class, 'setRolePermissions']);
     Route::get('user-permissions/{userId}', [UserController::class, 'getUserPermissions']);
 
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::prefix('admin')->group(function () {
-            Route::get('users/with-role', [UserController::class, 'usersWithRole']);
-            Route::get('permissions', [UserController::class, 'permissions']);
-            Route::get('role-permissions/{role}', [UserController::class, 'getRolePermissions']);
-            Route::get('user-permissions/{userId}', [UserController::class, 'getUserPermissions']);
-        });
-    });
+    // Route::middleware('auth:sanctum')->group(function () {
+    //     Route::prefix('admin')->group(function () {
+    //         Route::get('users/with-role', [UserController::class, 'usersWithRole']);
+    //         Route::get('permissions', [UserController::class, 'permissions']);
+    //         Route::get('role-permissions/{role}', [UserController::class, 'getRolePermissions']);
+    //         Route::get('user-permissions/{userId}', [UserController::class, 'getUserPermissions']);
+    //     });
+    // });
 
     // Settings routes
     Route::get('settings', [SettingsController::class, 'index']);

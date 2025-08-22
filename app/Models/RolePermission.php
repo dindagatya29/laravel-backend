@@ -9,11 +9,17 @@ class RolePermission extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'role', 'permission_id', 'allowed',
+        'role',
+        'permission_id',
+        'allowed',
+    ];
+
+    protected $casts = [
+        'allowed' => 'boolean',
     ];
 
     public function permission()
     {
         return $this->belongsTo(Permission::class);
     }
-} 
+}
